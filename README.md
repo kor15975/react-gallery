@@ -1,16 +1,208 @@
-# React + Vite
+# React Gallery
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+실무 작업물을 담은 갤러리를 **React로 만들어본 프로젝트**입니다.
+예전에 라이브러리로 처리했던 필터링을 라이브러리 없이 직접 구현해보고,
+두 방식이 어떻게 다른지 확인하기 위해 만들었습니다.
 
-Currently, two official plugins are available:
+**Live** — https://react-gallery-jjw8.vercel.app/
+**Stack** — React 19, Vite, CSS
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 왜 만들었나
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+4년간 웹 퍼블리싱 실무를 하면서 화면은 주로 jQuery로 다뤘습니다.
+이벤트가 발생하면 DOM을 직접 찾아 바꾸는 방식이었습니다.
 
-## Expanding the Oxlint configuration
+필터 갤러리는 예전에 Isotope 예제를 따라 만들어본 적이 있습니다.
+동작은 했지만 라이브러리가 대신 해주는 부분이라 그 안에서 무슨 일이 일어나는지는 모르고 넘어갔습니다.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+React를 책으로만 읽으면 "선언적"이라는 말이 와닿지 않아,
+**같은 기능을 라이브러리 없이 직접 만들어보기로 했습니다.**
+기능 설계에 시간을 쓰지 않고 방식의 차이에만 집중할 수 있기 때문입니다.
+
+---
+
+## 구현 기능
+
+- 카테고리별 작업물 필터링 (전체 / 웹 / 스터디)
+- 제목 검색 (대소문자 구분 없음)
+- 카테고리와 검색어 동시 적용
+- 결과가 없을 때 안내 문구 표시
+- 선택된 필터 버튼 활성 상태 표시
+- 썸네일이 있으면 이미지, 없으면 제목 텍스트로 대체
+- 카드 클릭 시 실제 사이트로 이동
+- 반응형 그리드 (3단 → 2단 → 1단)
+
+---
+
+## 라이브러리에 맡겼던 것을 직접 만들어보며
+
+### 필터링
+
+Isotope는 화면에 이미 존재하는 요소를 **찾아서 보여주고 숨기는** 방식입니다.
+그래서 카드 마크업이 HTML에 전부 들어 있어야 하고,
+작업물을 하나 추가하려면 HTML을 직접 늘려야 했습니다.
+
+React에서는 보여줄 목록 자체를 계산합니다.
+
+```jsx
+const [filter, setFilter] = useState('all')
+const [keyword, setKeyword] = useState('')
+
+const visibleItems = items.filter((item) => {
+  const matchCategory = filter === 'all' || item.category === filter
+  const matchKeyword  = item.title.toLowerCase().includes(keyword.toLowerCase())
+  return matchCategory && matchKeyword
+})
+```
+
+```jsx
+<button onClick={() => setFilter(cat.key)}>{cat.label}</button>
+```
+
+DOM을 찾아 보이고 숨기는 코드가 없습니다.
+`filter` 값 하나만 바꾸면 화면이 그 값을 보고 스스로 결정합니다.
+
+조건을 하나 더 얹는 일도 간단했습니다.
+검색 기능을 추가할 때 화면 쪽은 건드리지 않고
+`.filter()` 안에 조건 한 줄만 추가하면 끝이었습니다.
+
+### 버튼 활성 상태
+
+예전에는 클릭할 때마다 모든 버튼에서 클래스를 떼고 누른 버튼에만 다시 붙였습니다.
+지금은 **지금 상태에서 클래스가 무엇이어야 하는지**를 적습니다.
+
+```jsx
+className={filter === cat.key ? 'filter-btn active' : 'filter-btn'}
+```
+
+### 마크업 관리
+
+작업물을 추가할 때 HTML을 늘리는 대신 배열에 한 줄을 넣습니다.
+
+```jsx
+{ id: 6, title: '더파인오일', category: 'web', image: '/works5.png', url: '...' }
+```
+
+```jsx
+{visibleItems.map((item) => (
+  <Card key={item.id} item={item} />
+))}
+```
+
+카드 마크업은 `Card.jsx` 한 곳에만 있습니다.
+디자인을 고칠 일이 생겨도 한 파일만 고치면 됩니다.
+
+---
+
+## 막혔던 지점
+
+### 1. 계산은 했는데 화면이 그 값을 안 보고 있었다
+
+필터 조건은 맞게 짰는데 목록이 계속 전체로 나왔습니다.
+원인은 `visibleItems`를 만들어두고 정작 렌더링에서는 원본 배열을 쓰고 있던 것이었습니다.
+
+```jsx
+{items.map(...)}          // 계산 결과를 안 씀
+{visibleItems.map(...)}   // 수정
+```
+
+**상태가 바뀌어도 화면이 그 결과를 참조하지 않으면 아무 일도 일어나지 않는다**는 걸 확인했습니다.
+이후로는 문제가 생기면 ① 상태가 바뀌는가 ② 계산이 맞는가 ③ 화면이 그 값을 쓰는가 순으로 확인하게 됐습니다.
+
+### 2. 대소문자 불일치가 에러 없이 조용히 넘어간다
+
+데이터에는 `Image`, 코드에서는 `item.image`로 써서 이미지가 계속 안 나왔습니다.
+JavaScript는 없는 속성을 읽어도 에러 대신 `undefined`를 반환하기 때문에
+조건문이 항상 거짓이 되면서 원인을 찾기 어려웠습니다.
+
+`console.log(item.image)` 한 줄로 데이터 문제인지 경로 문제인지 범위를 좁혔습니다.
+
+### 3. 터미널이 조용해도 화면은 깨질 수 있다
+
+검색 기능을 넣다가 `useState`를 컴포넌트 밖에 선언했습니다.
+문법적으로는 문제가 없는 코드라 개발 서버는 에러 없이 정상 실행됐고,
+브라우저 화면만 하얗게 떴습니다.
+
+원인은 브라우저 콘솔의 `Invalid hook call` 메시지에 있었습니다.
+**터미널은 서버가 뜨는 단계를, 콘솔은 화면이 그려지는 단계를 본다**는 걸 알게 됐고,
+이후로는 화면이 안 뜨면 콘솔부터 열어봅니다.
+
+### 4. 로컬에서는 되고 배포하면 깨질 수 있다
+
+Windows는 파일명 대소문자를 구분하지 않지만 배포 환경(Linux)은 구분합니다.
+이미지 경로를 실제 파일명과 정확히 일치시켜야 한다는 점을 배포 단계에서 확인했습니다.
+
+---
+
+## 배운 점
+
+### 컴포넌트가 무엇인지 이제 알겠다
+
+OutSystems ODC로 화면을 만들 때 Web Block을 제대로 몰라 활용하지 못했습니다.
+비슷한 구성이 반복될 때마다 같은 작업을 다시 했고,
+"이걸 한 번만 만들어두고 쓸 수 있으면 좋겠다"는 생각만 하고 넘어갔습니다.
+
+React에서 카드를 `Card` 컴포넌트로 분리해보고 나서야 그게 무엇이었는지 이해했습니다.
+틀은 한 번만 만들고 데이터만 바꿔 넣으면 된다는 것,
+수정할 일이 생겨도 한 곳만 고치면 된다는 것을요.
+
+반복되는 디자인 작업이 많은 퍼블리싱에서 특히 쓸모가 있겠다고 생각했고,
+지금은 ODC로 돌아가도 Block을 활용할 수 있을 것 같습니다.
+
+### 라이브러리를 쓰는 것과 아는 것은 다르다
+
+Isotope로 필터를 붙였을 때도 화면은 똑같이 동작했습니다.
+다만 그때는 설정값을 맞추는 일이었고, 이번에는 조건을 직접 설계하는 일이었습니다.
+
+라이브러리를 쓰지 말자는 뜻은 아닙니다.
+**안에서 무슨 일이 일어나는지 알고 쓰는 것과 모르고 쓰는 것이 다르다**는 걸 확인했습니다.
+검색 조건을 추가할 때 어디를 고쳐야 할지 바로 알았던 게 그 차이였습니다.
+
+### 어려웠던 것 — 익숙해서 더 헷갈린다
+
+가장 힘들었던 건 문법이 아직 정리되지 않았다는 점입니다.
+JSX가 HTML과 비슷하게 생겼는데 실제로는 JavaScript라,
+4년간 굳은 습관과 자꾸 충돌했습니다.
+
+- `class`가 아니라 `className`
+- 속성에 값을 넣을 때는 `{ }`가 필요
+- 조건 분기를 `if`가 아니라 삼항 연산자로
+
+아예 다르게 생겼으면 새로 배우면 되는데,
+**비슷해 보이는 탓에 오히려 더 자주 틀렸습니다.**
+
+아직 남의 React 코드를 막힘없이 읽는 수준은 아닙니다.
+손에 붙이려면 시간이 더 필요한 부분이라고 보고 있습니다.
+
+### 기존 경험과 연결된 부분
+
+OutSystems ODC로 팀 프로젝트를 하면서 Local Variable과 List Widget을 썼는데,
+React의 `useState`와 `.map()`이 같은 개념이었습니다.
+
+| React | OutSystems ODC |
+|---|---|
+| 컴포넌트 | Web Block |
+| props | Input Parameter |
+| `useState` | Local Variable |
+| `.map()` | List Widget |
+
+"데이터를 바꾸면 화면이 따라온다"는 모델을 ODC에서 이미 경험했기 때문에,
+낯선 것은 개념이 아니라 문법이었습니다.
+
+---
+
+## 실행 방법
+
+```bash
+npm install
+npm run dev
+```
+
+---
+
+## 다음에 해볼 것
+
+- 썸네일이 없는 스터디 프로젝트의 캡처 추가
+- 기존 Music Player를 React로 옮기며 `useRef`, `useEffect` 익히기
